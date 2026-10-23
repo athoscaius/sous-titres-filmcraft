@@ -1,0 +1,78 @@
+{
+  "checks": [
+    {
+      "check": "French video transcription completes",
+      "passed": true
+    },
+    {
+      "check": "Language is French",
+      "passed": true
+    },
+    {
+      "check": "Real large-v3 model selected",
+      "passed": true
+    },
+    {
+      "check": "Several editable cues",
+      "passed": true
+    },
+    {
+      "check": "All cues inside source duration",
+      "passed": true
+    },
+    {
+      "check": "Cue times ordered and non-overlapping",
+      "passed": true
+    },
+    {
+      "check": "One line respected",
+      "passed": true
+    },
+    {
+      "check": "42-character limit respected",
+      "passed": true
+    },
+    {
+      "check": "Four-second maximum respected",
+      "passed": true
+    },
+    {
+      "check": "Timed words present",
+      "passed": true
+    },
+    {
+      "check": "French accents and context vocabulary retained",
+      "passed": true
+    },
+    {
+      "check": "Actual progress reaches completion",
+      "passed": true
+    },
+    {
+      "check": "Progress is monotonic",
+      "passed": true
+    },
+    {
+      "check": "Source unchanged",
+      "passed": true
+    },
+    {
+      "check": "silence rejected clearly",
+      "passed": true
+    },
+    {
+      "check": "no audio rejected clearly",
+      "passed": true
+    },
+    {
+      "check": "Cancellation terminates Whisper child",
+      "passed": true
+    }
+  ],
+  "passed": 17,
+  "fixture": "Synthetic French Thomas voice, encoded MP4/AAC",
+  "media_duration_seconds": 15.6,
+  "elapsed_seconds": 5.8,
+  "text": "Bonjour et bienvenue dans notre atelier. Aujourd'hui, nous allons créer des sous-titres en français pour notre documentaire. À Grenoble, Élodie prépare le montage et vérifie la synchronisation. Elle corrige la ponctuation, puis exporte le résultat dans FilmCraft.",
+  "limitations": "Synthetic speech validates packaging, French characters and timeline; not a benchmark of noisy real recordings. Quantization and ASR can still miss names or words."
+}

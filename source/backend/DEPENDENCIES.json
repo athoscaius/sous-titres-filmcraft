@@ -1,0 +1,8 @@
+{
+  "platform": "macOS 14+, Apple Silicon arm64 (M1+)" ,
+  "runtime": {"name":"whisper.cpp", "version":"1.9.5", "commit":"d1be6fde11ac6e0407606b4e42fe72d34add8037", "url":"https://github.com/ggml-org/whisper.cpp", "license":"MIT", "archive_sha256":"645445da884df6dbd52b30f82d7be7c01d1767c938714e477e786b88d529e9f4", "build":"Static linking, embedded Metal library; armv8.2-a+dotprod baseline, native CPU optimizations disabled for portability."},
+  "transcription_model": {"name":"OpenAI Whisper large-v3 Q5_0", "license":"MIT", "url":"https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-large-v3-q5_0.bin", "sha256":"d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1", "notes":"Full multilingual large-v3 model, quantized to five bits; French forced, beam size 5. The turbo model is not used."},
+  "speech_detector": {"name":"Silero VAD 6.2.0", "license":"MIT", "url":"https://huggingface.co/ggml-org/whisper-vad/resolve/9ffd54a1e1ee413ddf265af9913beaf518d1639b/ggml-silero-v6.2.0.bin", "sha256":"2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987"},
+  "build_tool": {"name":"CMake", "version":"3.31.8", "url":"https://github.com/Kitware/CMake/releases/download/v3.31.8/cmake-3.31.8-macos-universal.tar.gz", "sha256":"d1449f969c54d5c00886d5b643340d493dfb3c81cb39ee29b35453395c11ebf7", "notes":"Build only, not distributed inside application."},
+  "audio":"Apple AVFoundation system framework. No ffmpeg, Python, pip or Homebrew required at runtime. All models bundled; no network access during transcription."
+}

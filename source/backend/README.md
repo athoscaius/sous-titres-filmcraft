@@ -1,0 +1,13 @@
+# Moteur local de transcription
+
+`build-backend.command /chemin/du/paquet.app/Contents/Resources` compile et copie le moteur natif et ses modèles. Le cache est personnalisable avec `BACKEND_CACHE`. Le script télécharge uniquement les sources officielles indiquées dans `DEPENDENCIES.json`, vérifie les SHA-256, puis compile avec les outils Apple et CMake privé. Il ne modifie aucun Python ni Homebrew. Les licences sont copiées dans `Resources/licenses`. Le script principal de l’app doit signer les deux exécutables avant de signer le paquet.
+
+Exécution : `Resources/bin/transcribe --input video.mp4 --output projet.json [--context 'Noms propres, lieu, vocabulaire…'] [--lines 2] [--max-chars 42] [--max-duration 6]`.
+
+Médias lisibles par AVFoundation : typiquement MP4/MOV/M4V, M4A/MP3/WAV/AIFF. Le conteneur seul ne garantit pas la compatibilité de chaque codec. Une erreur est renvoyée si la piste ne se décode pas. Toutes les pistes audio sont mixées en mono 16 kHz. Le média d’origine n’est jamais modifié. Les fichiers temporaires privés sont supprimés après traitement ou annulation. Maximum 18 heures par média.
+
+Sortie standard : événements JSONL `{"progress":0.25,"stage":"transcription","message":"…"}`. Les premiers 8 % correspondent à l’extraction audio, puis le moteur signale ses progrès réels par fenêtres de transcription ; la jauge peut rester stable pendant le chargement et le calcul. Dernier événement : `stage:complete`, `progress:1`. Les erreurs sont des JSON sur stderr, code de sortie 1 (ou 130 après annulation). SIGTERM/SIGINT sont transmis au sous-processus Whisper.
+
+JSON de sortie : version 1, language `fr`, source (chemin), duration en secondes, model, segments `[{id,start,end,text,words:[{text,start,end}]}]`. Temps en secondes sur la chronologie d’origine. Les mots proviennent des tokens horodatés Whisper ; si un segment comporte des horodatages de mots invalides, leur répartition est estimée dans les bornes du segment. Ce ne sont pas des alignements phonétiques garantis. Les sous-titres initiaux sont regroupés selon pauses, ponctuation, 6 secondes et 42 caractères par ligne (2 lignes). Les durées peuvent dépasser ce seuil pour un mot exceptionnellement long ; l’édition manuelle garde priorité.
+
+Le contexte est envoyé comme amorce lexicale à Whisper, limité à 1 200 caractères. Il aide pour les noms et le jargon, mais ne garantit pas leur orthographe. Silero écarte les zones sans parole ; un précontrôle rejette l’audio totalement silencieux. Des erreurs restent possibles dans la musique, le bruit et les voix superposées : la relecture manuelle demeure nécessaire. Aucun contenu n’est envoyé en ligne.
