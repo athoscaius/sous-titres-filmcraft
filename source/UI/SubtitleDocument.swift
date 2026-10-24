@@ -20,15 +20,20 @@ struct SubtitleCue: Codable, Equatable {
     }
 }
 struct SubtitleStyle: Codable, Equatable {
-    var fontName = "Helvetica Neue"
-    var fontFamily = "Helvetica Neue"
-    var fontFace = "Regular"
+    static let preferredFontName: String = {
+        // Variable and static font installations can expose different PostScript names.
+        let faces=NSFontManager.shared.availableMembers(ofFontFamily:"Delight") ?? []
+        return faces.first(where:{ ($0[1] as? String)=="Semi Bold" })?.first as? String ?? "Delight-SemiBold"
+    }()
+    var fontName = SubtitleStyle.preferredFontName
+    var fontFamily = "Delight"
+    var fontFace = "Semi Bold"
     var outlineColor = "#000000"
     var positionX = 0.5
     var positionY = 0.88
-    var fontSize: Double = 52
+    var fontSize: Double = 70
     var color = "#FFFFFF"
-    var outline: Double = 2
+    var outline: Double = 0
     var bottomMargin: Double = 70
     var top = false
     var bold = false
@@ -39,9 +44,9 @@ struct SubtitleProject: Codable, Equatable {
     var duration: Double = 0
     var segments: [SubtitleCue] = []
     var style = SubtitleStyle()
-    var lines = 2
-    var maxChars = 42
-    var maxDuration: Double = 6
+    var lines = 1
+    var maxChars = 35
+    var maxDuration: Double = 3
     var context = ""
     var timelineOffset: Double = 0
     var model = "Whisper large-v3"
@@ -214,6 +219,11 @@ enum SubtitleFormat {
 
 #if FILMCRAFT_INTEGRATION
 enum SubtitleFilmCraftAdapter {
+    static func graphicProperties(_ style: SubtitleStyle, height: Double) -> [String:Any] {
+        ["align":"center", "fill_color":style.color, "stroke":style.outline>0,
+         "stroke_type":"Outer", "stroke_width":style.outline*height/1080,
+         "stroke_color":style.outlineColor, "faux_bold":false]
+    }
     static func style(_ source: SubtitleStyle) -> FilmCraftCaptionStyle {
         var target = FilmCraftCaptionStyle()
         target.font = source.fontName; target.size = source.fontSize

@@ -272,7 +272,7 @@ final class FilmCraftBridge {
             guard let result=try write("graphics.newText",["text":cue.text,"newClip":true,"track":trackIndex,"time":a,"seconds":Double(b-a)/254016000000.0,"font":style.fontFamily,"fontStyle":style.fontFace,"size":size,"position":[x,y]]) as? [String:Any],
                   let clip=(result["clip"] as? NSNumber)?.int64Value else {throw FilmCraftBridgeError.message("Le titre n’a pas été confirmé.")}
             track.clips.append(clip);titleBindings[expected.trackKey]=track
-            _ = try write("graphics.set",["clip":clip,"layer":0,"props":["align":"center","fill_color":style.color,"stroke":style.outline>0,"stroke_width":style.outline*h/1080,"stroke_color":style.outlineColor,"faux_bold":false]])
+            _ = try write("graphics.set",["clip":clip,"layer":0,"props":SubtitleFilmCraftAdapter.graphicProperties(style,height:h)])
         }
         return FilmCraftTitleResult(context:current,binding:track,message:"\(cues.count) sous-titres dans « \(expected.sequenceName) » · piste ArtCraft mise à jour.")
     }

@@ -1,9 +1,38 @@
 import Foundation
+import AppKit
 
 enum SubtitleSelfTest {
+    static func tryOuterOutlineRendering() -> Bool {
+        func render(outline:Double) -> NSBitmapImageRep {
+            let bitmap=NSBitmapImageRep(bitmapDataPlanes:nil,pixelsWide:960,pixelsHigh:540,bitsPerSample:8,samplesPerPixel:4,hasAlpha:true,isPlanar:false,colorSpaceName:.deviceRGB,bytesPerRow:0,bitsPerPixel:0)!
+            let view=SubtitleOverlay(frame:NSRect(x:0,y:0,width:960,height:540))
+            view.text="Éléonore · FilmCraft";view.style.fontSize=140
+            view.style.outline=outline;view.style.outlineColor="#FF0000"
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current=NSGraphicsContext(bitmapImageRep:bitmap)
+            view.draw(view.bounds)
+            NSGraphicsContext.restoreGraphicsState()
+            return bitmap
+        }
+        let plain=render(outline:0),outlined=render(outline:8)
+        var fillPixels=0,exteriorPixels=0
+        for y in 0..<540 {for x in 0..<960 {
+            guard let a=plain.colorAt(x:x,y:y),let b=outlined.colorAt(x:x,y:y) else{return false}
+            if a.alphaComponent>0.99 && min(a.redComponent,a.greenComponent,a.blueComponent)>0.99 {
+                fillPixels += 1
+                if min(b.redComponent,b.greenComponent,b.blueComponent)<0.95 {return false}
+            }
+            if a.alphaComponent<0.01 && b.alphaComponent>0.9 && b.redComponent>0.9 && b.greenComponent<0.1 {exteriorPixels += 1}
+        }}
+        return fillPixels>1000 && exteriorPixels>1000
+    }
     static func run() throws {
         func check(_ value: @autoclosure () -> Bool,_ name:String) throws {if !value(){throw SubtitleError.invalid(name)}}
         func rejects(_ name:String,_ body:() throws->Void) throws {var failed=false;do{try body()}catch{failed=true};try check(failed,name)}
+        let defaults=SubtitleProject()
+        try check(defaults.lines==1 && defaults.maxChars==35 && defaults.maxDuration==3,"Requested default segmentation")
+        try check(defaults.style.fontFamily=="Delight" && defaults.style.fontFace=="Semi Bold" && defaults.style.fontSize==70 && defaults.style.outline==0,"Requested default typography")
+        try check(tryOuterOutlineRendering(),"Outer outline preserves letter fill and adds exterior pixels")
         let cues=[SubtitleCue(start:0.125,end:3.75,text:"Bonjour, François.\nBienvenue à Paris."),SubtitleCue(start:4,end:6.9,text:"Voici le contexte : l’intelligence artificielle.")]
         let srt=try SubtitleFormat.srt(cues)
         try check(srt.contains("00:00:00,125 --> 00:00:03,750"),"SRT millisecond precision")
@@ -20,7 +49,7 @@ enum SubtitleSelfTest {
         let escaped=[SubtitleCue(start:1,end:2,text:"A < B & C > D")]
         let vtt=try SubtitleFormat.vtt(escaped)
         try check(vtt.contains("A &lt; B &amp; C &gt; D"),"WebVTT escaped markup")
-        var style=SubtitleStyle();style.color="#123456";style.top=true;style.fontSize=64
+        var style=SubtitleStyle();style.color="#123456";style.top=true;style.fontSize=64;style.outline=2
         let ass=try SubtitleFormat.ass([SubtitleCue(start:1.235,end:3,text:"{\\bord100} texte\nDeuxième ligne")],style:style)
         try check(ass.contains("&H00563412"),"ASS BGR color")
         try check(ass.contains("1,2.0,0,8,80,80,70,1"),"ASS anchor + outline")
@@ -73,7 +102,12 @@ enum SubtitleSelfTest {
         #if FILMCRAFT_INTEGRATION
         let adapter=SubtitleFilmCraftAdapter.style(SubtitleStyle())
         try check(abs(adapter.margin-70.0/1080)<0.000_001,"FilmCraft margin pixels normalized")
-        try check(adapter.size==52,"FilmCraft font size remains in pixels")
+        try check(adapter.size==70,"FilmCraft font size remains in pixels")
+        let defaultProps=SubtitleFilmCraftAdapter.graphicProperties(defaults.style,height:1080)
+        try check(defaultProps["stroke_type"] as? String == "Outer" && defaultProps["stroke"] as? Bool == false,"FilmCraft default outline disabled and outside")
+        var outlined=defaults.style;outlined.outline=4
+        let props=SubtitleFilmCraftAdapter.graphicProperties(outlined,height:2160)
+        try check(props["stroke_type"] as? String == "Outer" && props["stroke_width"] as? Double == 8 && props["stroke"] as? Bool == true,"FilmCraft outer outline scales with frame height")
         #endif
         print("Document checks passed: timing, overlaps, UTF-8, SRT/VTT/ASS, styles, projects, 12 mixed-word reflow regressions, FilmCraft style adapter and export offset.")
 

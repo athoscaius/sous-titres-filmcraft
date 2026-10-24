@@ -40,14 +40,24 @@ final class SubtitleOverlay: NSView {
         if style.bold { font = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask) }
         let p = NSMutableParagraphStyle(); p.alignment = .center; p.lineBreakMode = .byWordWrapping
         let color = NSColor(hex: style.color)
-        let attributes: [NSAttributedString.Key:Any] = [.font:font, .foregroundColor:color, .strokeColor:NSColor(hex:style.outlineColor), .strokeWidth: -style.outline/max(style.fontSize,1)*100, .paragraphStyle:p]
+        let attributes: [NSAttributedString.Key:Any] = [.font:font, .foregroundColor:color, .paragraphStyle:p]
         let attributed = NSAttributedString(string: text, attributes: attributes)
         let maximum=max(1,area.width*0.9)
         let measured=attributed.boundingRect(with:NSSize(width:maximum,height:10000),options:[.usesLineFragmentOrigin,.usesFontLeading])
         let width=min(maximum,ceil(measured.width)+4),height=ceil(measured.height)+4
         let x=area.minX+(area.width-width)*style.positionX
         let y=area.minY+(area.height-height)*(1-style.positionY)
-        attributed.draw(with:NSRect(x:x,y:y,width:width,height:height),options:[.usesLineFragmentOrigin,.usesFontLeading])
+        let rect=NSRect(x:x,y:y,width:width,height:height)
+        let options:NSString.DrawingOptions=[.usesLineFragmentOrigin,.usesFontLeading]
+        if style.outline > 0 {
+            // AppKit strokes straddle the glyph edge. Draw twice the requested
+            // width first, then restore the full glyph fill above the inner half.
+            var outlineAttributes=attributes
+            outlineAttributes[.strokeColor]=NSColor(hex:style.outlineColor)
+            outlineAttributes[.strokeWidth]=2*style.outline/max(style.fontSize,1)*100
+            NSAttributedString(string:text,attributes:outlineAttributes).draw(with:rect,options:options)
+        }
+        attributed.draw(with:rect,options:options)
     }
 }
 extension NSColor {
