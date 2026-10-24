@@ -4,7 +4,7 @@ Compagnon macOS indépendant pour transcrire en français une séquence FilmCraf
 
 ## Installer
 
-[Télécharger le DMG pour Mac Apple Silicon](https://github.com/athoscaius/sous-titres-filmcraft/releases/latest/download/Sous-titres-FilmCraft-1.3.2-arm64.dmg), l’ouvrir puis glisser **Sous-titres FilmCraft** dans Applications.
+[Télécharger le DMG pour Mac Apple Silicon](https://github.com/athoscaius/sous-titres-filmcraft/releases/latest/download/Sous-titres-FilmCraft-1.4.0-arm64.dmg), l’ouvrir puis glisser **Sous-titres FilmCraft** dans Applications.
 
 Mac Apple Silicon, **macOS 14+**. Environ 1,1 Go de modèles inclus, aucun compte ni clé API, aucun envoi du média sur Internet. Signature locale ad hoc, sans Developer ID ni notarisation Apple ; sur un autre Mac, Gatekeeper peut nécessiter une autorisation dans Confidentialité et sécurité.
 
@@ -16,6 +16,8 @@ Mac Apple Silicon, **macOS 14+**. Environ 1,1 Go de modèles inclus, aucun compt
 4. Cliquer **Sous-titrer la TL** quand le résultat convient. Les renvois de la session remplacent le contenu de la même piste, sans doublon.
 
 Par défaut : **Delight Semi Bold, 70 px, contour 0 px, une ligne, 35 caractères, 3 secondes maximum**. Le contour se dessine à l’extérieur des lettres dans l’aperçu et dans les titres FilmCraft. Delight doit être installée sur le Mac ; les polices ne sont pas incluses dans le paquet.
+
+La résolution et l’aspect ratio de la séquence sont détectés automatiquement : l’aperçu, la taille et la disposition des titres s’adaptent aux formats horizontal, vertical, carré et 4K. La taille choisie sert de référence Full HD, ajustée au côté court ; les textes longs restent dans la largeur utile et les curseurs de position restent modifiables. L’export ASS utilise aussi le format détecté.
 
 L’envoi utilise des **titres texte natifs éditables sur une piste vidéo dédiée unique**, pour conserver la position libre et les variantes de police que les sous-titres natifs de FilmCraft 0.12.0 limitent. Les exports SRT/VTT conservent texte et temps ; l’export ASS conserve le style pour les outils compatibles. FilmCraft 0.12.0 ne lit pas ASS.
 

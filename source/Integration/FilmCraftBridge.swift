@@ -13,6 +13,7 @@ struct FilmCraftContext: Equatable, Codable {
     let sequenceID: Int64
     let sequenceName: String
     let revision: Int64
+    let canvas:SubtitleCanvas
     func sameTarget(as other: Self) -> Bool {
         processID == other.processID && projectName == other.projectName &&
         projectPath == other.projectPath && sequenceID == other.sequenceID
@@ -213,7 +214,7 @@ final class FilmCraftBridge {
         }catch {throw FilmCraftBridgeError.message("Mise à jour interrompue. Aucune piste supplémentaire n’a été créée. Vérifiez la piste dans FilmCraft ; ses modifications restent annulables dans le logiciel. \(error.localizedDescription)")}
     }
 
-    func sendTitles(cues:[FilmCraftCue],style:SubtitleStyle,expected:FilmCraftContext,binding:FilmCraftTitleBinding?) throws -> FilmCraftTitleResult {
+    func sendTitles(cues:[FilmCraftCue],style:SubtitleStyle,lines:Int=1,expected:FilmCraftContext,binding:FilmCraftTitleBinding?) throws -> FilmCraftTitleResult {
         guard !cues.isEmpty,style.fontSize.isFinite,(12...160).contains(style.fontSize),
               (0...1).contains(style.positionX),(0...1).contains(style.positionY) else {throw FilmCraftBridgeError.message("Paramètres des titres invalides.")}
         let c=try FilmCraftConnection(port:connectionPort)
@@ -224,6 +225,8 @@ final class FilmCraftBridge {
               let rate=settings["frame_rate"] as? [String:Any],let num=(rate["num"] as? NSNumber)?.doubleValue,
               let den=(rate["den"] as? NSNumber)?.doubleValue,num>0,den>0,w>0,h>0,
               let video=sequence["video"] as? [[String:Any]] else {throw FilmCraftBridgeError.message("Format de la séquence indisponible.")}
+        let canvas=try SubtitleCanvas.from(settings:settings)
+        guard canvas==expected.canvas else {throw FilmCraftBridgeError.message("Le format de la séquence a changé. Relancez la transcription.")}
         let frameTicks=(254016000000.0*den/num).rounded()
         var previous:Int64=0
         let timed=try cues.map {cue -> (FilmCraftCue,Int64,Int64) in
@@ -261,18 +264,13 @@ final class FilmCraftBridge {
         }
         guard var track=owned else {throw FilmCraftBridgeError.message("Piste indisponible.")}
         titleBindings[expected.trackKey]=track
-        let size=style.fontSize*h/1080
-        let font=NSFont(name:style.fontName,size:size) ?? NSFont.systemFont(ofSize:size)
         for (cue,a,b) in timed {
-            let paragraph=NSMutableParagraphStyle();paragraph.alignment = .center
-            let bounds=(cue.text as NSString).boundingRect(with:NSSize(width:w*0.9,height:100000),options:[.usesLineFragmentOrigin,.usesFontLeading],attributes:[.font:font,.paragraphStyle:paragraph])
-            let width=min(w*0.9,ceil(bounds.width)+4),height=ceil(bounds.height)+4
-            let x=(w-width)*style.positionX+width/2
-            let y=(h-height)*style.positionY+font.ascender
-            guard let result=try write("graphics.newText",["text":cue.text,"newClip":true,"track":trackIndex,"time":a,"seconds":Double(b-a)/254016000000.0,"font":style.fontFamily,"fontStyle":style.fontFace,"size":size,"position":[x,y]]) as? [String:Any],
+            let layout=SubtitleTextLayout.make(text:cue.text,style:style,canvas:canvas,lines:lines)
+            let size=layout.fontSize,x=layout.frame.midX,y=layout.baseline
+            guard let result=try write("graphics.newText",["text":layout.text,"newClip":true,"track":trackIndex,"time":a,"seconds":Double(b-a)/254016000000.0,"font":style.fontFamily,"fontStyle":style.fontFace,"size":size,"position":[x,y]]) as? [String:Any],
                   let clip=(result["clip"] as? NSNumber)?.int64Value else {throw FilmCraftBridgeError.message("Le titre n’a pas été confirmé.")}
             track.clips.append(clip);titleBindings[expected.trackKey]=track
-            _ = try write("graphics.set",["clip":clip,"layer":0,"props":SubtitleFilmCraftAdapter.graphicProperties(style,height:h)])
+            _ = try write("graphics.set",["clip":clip,"layer":0,"props":SubtitleFilmCraftAdapter.graphicProperties(style,canvas:canvas)])
         }
         return FilmCraftTitleResult(context:current,binding:track,message:"\(cues.count) sous-titres dans « \(expected.sequenceName) » · piste ArtCraft mise à jour.")
     }
@@ -332,7 +330,8 @@ final class FilmCraftBridge {
         }
         return FilmCraftContext(processID: running.processIdentifier, projectName: name,
             projectPath: project["path"] as? String, sequenceID: sequence,
-            sequenceName: details["name"] as? String ?? "Séquence", revision: revision)
+            sequenceName: details["name"] as? String ?? "Séquence", revision: revision,
+            canvas:try SubtitleCanvas.from(settings:details["settings"] as? [String:Any] ?? [:]))
     }
 }
 

@@ -31,3 +31,9 @@ result is ../../../../verification/filmcraft-style-roundtrip.json.
 Only close the session you own after checking its project path/name/sequence identity again.
 Never run against an existing user project, never terminate a user session, never set a global
 FILMCRAFT_CONTROL_PORT environment variable (the host protocol is unauthenticated).
+
+## Formats de séquence (1.4)
+
+`FormatFixture.swift` se compile séparément avec `UI/SubtitleCanvas.swift`, `UI/SubtitleDocument.swift` et `Integration/FilmCraftBridge.swift` (définir `FILMCRAFT_INTEGRATION`). Il exige le PID et un port distinct de 47873 d’une instance vide lancée avec son propre `--data-dir` temporaire. Il refuse un projet enregistré et exige une séquence dont le nom commence par `Format fixture `. Il crée deux titres de test et renvoie leur taille, position et les identifiants des clips, à vérifier avec `graphics.list`. Ne jamais le lancer dans un projet utilisateur.
+
+Les autotests `--self-test` du compagnon couvrent aussi les formats 16:9, 9:16, 1:1, UHD, vertical UHD et panoramique, les pixels non carrés, la conservation des mots et des limites de lignes, ainsi que la résolution ASS. `--preview-ui --preview-format 1080x1920 --preview-output /private/tmp/vertical.png` produit un aperçu fictif sans connexion FilmCraft.

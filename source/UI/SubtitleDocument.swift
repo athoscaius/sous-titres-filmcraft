@@ -40,6 +40,7 @@ struct SubtitleStyle: Codable, Equatable {
 }
 struct SubtitleProject: Codable, Equatable {
     var version = 1
+    var canvas:SubtitleCanvas?
     var videoPath: String = ""
     var duration: Double = 0
     var segments: [SubtitleCue] = []
@@ -62,6 +63,7 @@ struct SubtitleProject: Codable, Equatable {
               style.bottomMargin.isFinite, (0...400).contains(style.bottomMargin),
               style.color.range(of: "^#[0-9a-fA-F]{6}$", options: .regularExpression) != nil,
               segments.count <= 100_000 else { throw SubtitleError.invalid("Le projet contient des paramètres invalides.") }
+        guard canvas?.isValid != false else {throw SubtitleError.invalid("Format de séquence invalide.")}
         try SubtitleFormat.validate(segments)
         return self
     }
@@ -111,8 +113,9 @@ enum SubtitleFormat {
         func escaped(_ text: String) -> String { text.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;") }
         return "WEBVTT\n\n" + cues.enumerated().map { "\($0.offset + 1)\n\(timestamp($0.element.start, separator: ".")) --> \(timestamp($0.element.end, separator: "."))\n\(escaped($0.element.text))\n" }.joined(separator: "\n")
     }
-    static func ass(_ cues: [SubtitleCue], style: SubtitleStyle) throws -> String {
+    static func ass(_ cues: [SubtitleCue], style: SubtitleStyle, canvas:SubtitleCanvas = .fullHD, lines:Int=2) throws -> String {
         try validate(cues)
+        guard canvas.isValid else {throw SubtitleError.invalid("Format ASS invalide.")}
         func time(_ t: Double) -> String {
             let cs = Int((t*100).rounded()); return String(format: "%d:%02d:%02d.%02d", cs/360000, (cs/6000)%60, (cs/100)%60, cs%100)
         }
@@ -123,14 +126,14 @@ enum SubtitleFormat {
         [Script Info]
         Title: Sous-titres FilmCraft
         ScriptType: v4.00+
-        PlayResX: 1920
-        PlayResY: 1080
+        PlayResX: \(Int(canvas.width))
+        PlayResY: \(Int(canvas.height))
         WrapStyle: 2
         ScaledBorderAndShadow: yes
 
         [V4+ Styles]
         Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-        Style: Default,\(safeFont),\(style.fontSize),&H00\(b)\(g)\(r),&H000000FF,&H00\(sb)\(sg)\(sr),&H80000000,\(style.bold ? -1 : 0),0,0,0,100,100,0,0,1,\(style.outline),0,\(style.top ? 8 : 2),80,80,\(Int(style.bottomMargin)),1
+        Style: Default,\(safeFont),\(style.fontSize*canvas.scale),&H00\(b)\(g)\(r),&H000000FF,&H00\(sb)\(sg)\(sr),&H80000000,\(style.bold ? -1 : 0),0,0,0,100,100,0,0,1,\(style.outline*canvas.scale),0,\(style.top ? 8 : 2),80,80,\(Int(style.bottomMargin)),1
 
         [Events]
         Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -138,14 +141,10 @@ enum SubtitleFormat {
         """
         for cue in cues {
             // ASS braces and backslashes are control syntax, not literal author text.
-            let text = cue.text.replacingOccurrences(of: "\\", with: "＼").replacingOccurrences(of: "{", with: "｛").replacingOccurrences(of: "}", with: "｝").replacingOccurrences(of: "\n", with: "\\N")
-            let font=NSFont(name:style.fontName,size:style.fontSize) ?? NSFont.systemFont(ofSize:style.fontSize)
-            let paragraph=NSMutableParagraphStyle();paragraph.alignment = .center
-            let measured=(cue.text as NSString).boundingRect(with:NSSize(width:1728,height:100000),options:[.usesLineFragmentOrigin,.usesFontLeading],attributes:[.font:font,.paragraphStyle:paragraph])
-            let width=min(1728,ceil(measured.width)+4),height=ceil(measured.height)+4
-            let x=Int(((1920-width)*style.positionX+width/2).rounded())
-            let y=Int(((1080-height)*style.positionY+height/2).rounded())
-            result += "Dialogue: 0,\(time(cue.start)),\(time(cue.end)),Default,,0,0,0,,{\\an5\\pos(\(x),\(y))}\(text)\n"
+            let layout=SubtitleTextLayout.make(text:cue.text,style:style,canvas:canvas,lines:lines)
+            let text=layout.text.replacingOccurrences(of:"\\",with:"＼").replacingOccurrences(of:"{",with:"｛").replacingOccurrences(of:"}",with:"｝").replacingOccurrences(of:"\n",with:"\\N")
+            let x=Int(layout.frame.midX.rounded()),y=Int(layout.frame.midY.rounded())
+            result += "Dialogue: 0,\(time(cue.start)),\(time(cue.end)),Default,,0,0,0,,{\\an5\\pos(\(x),\(y))\\fs\(String(format:"%.3f",layout.fontSize))}\(text)\n"
         }
         return result
     }
@@ -219,9 +218,9 @@ enum SubtitleFormat {
 
 #if FILMCRAFT_INTEGRATION
 enum SubtitleFilmCraftAdapter {
-    static func graphicProperties(_ style: SubtitleStyle, height: Double) -> [String:Any] {
+    static func graphicProperties(_ style: SubtitleStyle, canvas:SubtitleCanvas) -> [String:Any] {
         ["align":"center", "fill_color":style.color, "stroke":style.outline>0,
-         "stroke_type":"Outer", "stroke_width":style.outline*height/1080,
+         "stroke_type":"Outer", "stroke_width":style.outline*canvas.scale,
          "stroke_color":style.outlineColor, "faux_bold":false]
     }
     static func style(_ source: SubtitleStyle) -> FilmCraftCaptionStyle {

@@ -12,6 +12,8 @@ final class SubtitleApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
     let player = AVPlayer()
     let playerView = AVPlayerView()
     let overlay = SubtitleOverlay()
+    let previewPanel=CanvasPreview(frame:.zero)
+    let formatLabel=NSTextField(labelWithString:"Style · FilmCraft et export ASS")
     let seekSlider=NSSlider(value:0,minValue:0,maxValue:1,target:nil,action:nil)
     let playbackTime=NSTextField(labelWithString:"00:00 / 00:00")
     let table = NSTableView()
@@ -153,10 +155,11 @@ final class SubtitleApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
         // Stack's separator is vertical here.
         if let sep=body.arrangedSubviews.dropFirst().first { sep.removeConstraints(sep.constraints);sep.widthAnchor.constraint(equalToConstant:1).isActive=true;sep.heightAnchor.constraint(equalTo:body.heightAnchor).isActive=true }
         left.heightAnchor.constraint(equalTo:body.heightAnchor).isActive=true;rightScroll.heightAnchor.constraint(equalTo:body.heightAnchor).isActive=true
-        let videoPanel=NSView();videoPanel.wantsLayer=true;videoPanel.layer?.backgroundColor=NSColor.black.cgColor
-        playerView.player=player;playerView.controlsStyle = .none;playerView.videoGravity = .resizeAspect;fill(playerView,in:videoPanel);fill(overlay,in:videoPanel)
+        let videoPanel=previewPanel
+        playerView.player=player;playerView.controlsStyle = .none;playerView.videoGravity = .resizeAspect;fill(playerView,in:videoPanel.canvasView);fill(overlay,in:videoPanel.canvasView)
         videoPanel.heightAnchor.constraint(greaterThanOrEqualToConstant:240).isActive=true
-        let previewTitle=stack([section("Aperçu"),label("Style · FilmCraft et export ASS",dim:true,size:11)],vertical:false)
+        formatLabel.font = .systemFont(ofSize:11);formatLabel.textColor=Palette.dim
+        let previewTitle=stack([section("Aperçu"),formatLabel],vertical:false)
         let tableScroll=NSScrollView();tableScroll.hasVerticalScroller=true;tableScroll.drawsBackground=true;tableScroll.backgroundColor=Palette.field;tableScroll.borderType = .lineBorder
         for (id,title,width) in [("number","Nº",CGFloat(35)),("start","Début",CGFloat(100)),("end","Fin",CGFloat(100)),("text","Texte",CGFloat(400))] { let c=NSTableColumn(identifier:NSUserInterfaceItemIdentifier(id));c.title=title;c.width=width;c.minWidth=id=="text" ? 160 : width;c.resizingMask=id=="text" ? .autoresizingMask : [];table.addTableColumn(c) }
         table.dataSource=self;table.delegate=self;table.rowHeight=35;table.backgroundColor=Palette.field;table.selectionHighlightStyle = .regular;table.allowsMultipleSelection=false;table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle;tableScroll.documentView=table;tableScroll.heightAnchor.constraint(greaterThanOrEqualToConstant:150).isActive=true
@@ -268,7 +271,12 @@ final class SubtitleApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
         overlay.text=project.segments.first(where:{$0.start<=t && t<$0.end})?.text ?? ""
         if previewMode && project.videoPath.isEmpty {overlay.text=project.segments.first?.text ?? ""}
         overlay.style=project.style
-        if let size=player.currentItem?.presentationSize,size.width>0,size.height>0 {overlay.videoSize=size}
+        overlay.canvas=project.outputCanvas;overlay.lineLimit=project.lines;previewPanel.canvas=project.outputCanvas
+        formatLabel.stringValue=project.canvas?.label ?? "Style · FilmCraft et export ASS"
+        let layout=overlay.textLayout()
+        sizeValue.stringValue="\(Int(layout.fontSize.rounded())) px"
+        sizeSlider.toolTip="Taille relative : \(Int(project.style.fontSize)) · adaptée au format de la séquence."
+        maxCharsField.toolTip="Limite demandée : \(project.maxChars) · adaptée à la largeur : \(project.adaptiveMaxChars) caractères."
     }
     @objc func undoEdit() { guard !busy else{return}; if let responder=window.firstResponder as? NSTextView,responder.undoManager?.canUndo == true,responder === textEditor {responder.undoManager?.undo();return};guard let state=undoStates.popLast() else{return};redoStates.append(project);project=state;updateUI() }
     @objc func redoEdit() {guard !busy,let state=redoStates.popLast() else{return};undoStates.append(project);project=state;updateUI()}
@@ -298,7 +306,7 @@ final class SubtitleApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
         project.style.positionX=xSlider.doubleValue/100;project.style.positionY=ySlider.doubleValue/100;project.style.bold=false
         sizeValue.stringValue="\(Int(project.style.fontSize)) px";xValue.stringValue="\(Int(xSlider.doubleValue)) %";yValue.stringValue="\(Int(ySlider.doubleValue)) %";updateOverlay();markDirty()
     }
-    @objc func reflow() {guard !busy,commitCue(),!project.segments.isEmpty else{return};layoutChanged();record();project.segments=SubtitleFormat.reflow(project.segments,lines:project.lines,maxChars:project.maxChars,maxDuration:project.maxDuration);updateUI(select:0);status.stringValue="Découpage recomposé. Vérifiez la synchronisation à l’écoute."}
+    @objc func reflow() {guard !busy,commitCue(),!project.segments.isEmpty else{return};layoutChanged();record();project.segments=SubtitleFormat.reflow(project.segments,lines:project.lines,maxChars:project.adaptiveMaxChars,maxDuration:project.maxDuration);updateUI(select:0);status.stringValue="Découpage recomposé. Vérifiez la synchronisation à l’écoute."}
     @objc func togglePlayback() {if player.rate>0 {player.pause()}else{player.play()}}
     @objc func seekVideo() {player.seek(to:CMTime(seconds:seekSlider.doubleValue,preferredTimescale:600),toleranceBefore:.zero,toleranceAfter:.zero)}
     @objc func playCue() {guard commitCue(),let i=selected else{return};player.seek(to:CMTime(seconds:project.segments[i].start,preferredTimescale:600),toleranceBefore:.zero,toleranceAfter:.zero);player.play()}
@@ -325,7 +333,17 @@ final class SubtitleApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
     }
     func loadVideo(_ url:URL) {
         player.pause();let asset=AVURLAsset(url:url);let item=AVPlayerItem(asset:asset);player.replaceCurrentItem(with:item)
-        Task {do {let duration=try await asset.load(.duration);let playable=try await asset.load(.isPlayable);await MainActor.run {guard self.project.videoPath==url.path else{return};if duration.seconds.isFinite {self.project.duration=duration.seconds; if self.savedProject.segments.isEmpty {self.savedProject.duration=duration.seconds} };if !playable {self.status.stringValue="L’aperçu ne lit pas ce format. Whisper peut tout de même tenter la transcription."}}}catch{await MainActor.run {self.status.stringValue="Aperçu indisponible pour ce fichier. La transcription peut être tentée."}}}
+        Task {do {
+            let tracks=try await asset.loadTracks(withMediaType:.video)
+            var mediaCanvas:SubtitleCanvas?
+            if let track=tracks.first {
+                let natural=try await track.load(.naturalSize),transform=try await track.load(.preferredTransform)
+                let size=natural.applying(transform)
+                let candidate=SubtitleCanvas(width:abs(size.width),height:abs(size.height))
+                if candidate.isValid{mediaCanvas=candidate}
+            }
+            let detected=mediaCanvas
+            let duration=try await asset.load(.duration);let playable=try await asset.load(.isPlayable);await MainActor.run {guard self.project.videoPath==url.path else{return};if !self.timelineMode,let detected {self.project.canvas=detected;self.updateOverlay()};if duration.seconds.isFinite {self.project.duration=duration.seconds; if self.savedProject.segments.isEmpty {self.savedProject.duration=duration.seconds} };if !playable {self.status.stringValue="L’aperçu ne lit pas ce format. Whisper peut tout de même tenter la transcription."}}}catch{await MainActor.run {self.status.stringValue="Aperçu indisponible pour ce fichier. La transcription peut être tentée."}}}
     }
     @objc func importSRT() {
         guard !busy,commitCue() else{return}
@@ -339,7 +357,7 @@ final class SubtitleApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
         guard p.runModal() == .OK,let requested=p.url else{return};let ext=["srt","vtt","ass"][format.indexOfSelectedItem];let url=requested.deletingPathExtension().appendingPathExtension(ext)
         // Changing formats after entering a name can target a different existing file.
         if url != requested,FileManager.default.fileExists(atPath:url.path){let a=NSAlert();a.messageText="Remplacer \(url.lastPathComponent) ?";a.addButton(withTitle:"Remplacer");a.addButton(withTitle:"Annuler");guard a.runModal() == .alertFirstButtonReturn else{return}}
-        do {let raw:String;switch ext{case "ass":raw=try SubtitleFormat.ass(exportCues(),style:project.style);case "vtt":raw=try SubtitleFormat.vtt(exportCues());default:raw=try SubtitleFormat.srt(exportCues())};try raw.write(to:url,atomically:true,encoding:.utf8);status.stringValue="\(url.lastPathComponent) exporté.";NSWorkspace.shared.activateFileViewerSelecting([url])}catch{show(error)}
+        do {let raw:String;switch ext{case "ass":raw=try SubtitleFormat.ass(exportCues(),style:project.style,canvas:project.outputCanvas,lines:project.lines);case "vtt":raw=try SubtitleFormat.vtt(exportCues());default:raw=try SubtitleFormat.srt(exportCues())};try raw.write(to:url,atomically:true,encoding:.utf8);status.stringValue="\(url.lastPathComponent) exporté.";NSWorkspace.shared.activateFileViewerSelecting([url])}catch{show(error)}
     }
     @objc func transcribe() {
         if timelineMode && !busy { transcribeTimeline();return }
@@ -351,7 +369,7 @@ final class SubtitleApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
         guard let engine=Bundle.main.resourceURL?.appendingPathComponent("bin/transcribe"),FileManager.default.isExecutableFile(atPath:engine.path) else{alert("Moteur absent","Réinstallez l’application complète pour retrouver le moteur de transcription.");return}
         let job=UUID();let directory=FileManager.default.temporaryDirectory.appendingPathComponent("artcraft-subtitles-\(job.uuidString)",isDirectory:true)
         do {try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])}catch{show(error);return}
-        let output=directory.appendingPathComponent("transcription.json");let p=Process();p.executableURL=engine;p.arguments=["--input",project.videoPath,"--output",output.path,"--context",project.context,"--lines",String(project.lines),"--max-chars",String(project.maxChars),"--max-duration",String(project.maxDuration)]
+        let output=directory.appendingPathComponent("transcription.json");let p=Process();p.executableURL=engine;p.arguments=["--input",project.videoPath,"--output",output.path,"--context",project.context,"--lines",String(project.lines),"--max-chars",String(project.adaptiveMaxChars),"--max-duration",String(project.maxDuration)]
         let out=Pipe(),err=Pipe();p.standardOutput=out;p.standardError=err;progressPipe=out;stderrPipe=err;task=p;processBuffer=Data();errorBuffer=Data();currentTaskID=job;cancelled=false
         out.fileHandleForReading.readabilityHandler={ [weak self] handle in
             let data=handle.availableData;guard !data.isEmpty,let self=self else{return};self.pipeLock.lock();self.processBuffer.append(data);var messages:[Data]=[];while let newline=self.processBuffer.firstIndex(of:10){messages.append(self.processBuffer.prefix(upTo:newline));self.processBuffer.removeSubrange(...newline)};self.pipeLock.unlock()
@@ -485,6 +503,10 @@ final class SubtitleApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
     }
 
     func makePreview() {
+        if let index=CommandLine.arguments.firstIndex(of:"--preview-format"),index+1<CommandLine.arguments.count {
+            let dimensions=CommandLine.arguments[index+1].split(separator:"x").compactMap{Double($0)}
+            if dimensions.count==2 {let canvas=SubtitleCanvas(width:dimensions[0],height:dimensions[1]);if canvas.isValid{project.canvas=canvas}}
+        }
         previewMode=true;playerView.isHidden=true;project.segments=[SubtitleCue(start:0,end:3.2,text:"Chaque voix raconte une histoire.\nÀ vous de lui donner forme."),SubtitleCue(start:3.3,end:6.8,text:"La transcription devient un point de départ."),SubtitleCue(start:7,end:10.4,text:"Relisez les mots, ajustez le rythme."),SubtitleCue(start:10.5,end:13.8,text:"Et retrouvez votre style dans FilmCraft.")];savedProject=project;updateUI(select:0);if let index=CommandLine.arguments.firstIndex(of:"--preview-video"),index+1<CommandLine.arguments.count {let video=URL(fileURLWithPath:CommandLine.arguments[index+1]);project.videoPath=video.path;savedProject=project;playerView.isHidden=false;loadVideo(video);player.seek(to:CMTime(seconds:1,preferredTimescale:600),toleranceBefore:.zero,toleranceAfter:.zero)};titleLabel.stringValue="Interview · exemple de sous-titres";status.stringValue="Français · Whisper large-v3 · traitement local"
         if CommandLine.arguments.contains("--qa-style-controls") {
             do {try checkStyleControls();finishQA()}catch{show(error);exit(1)};return
@@ -496,5 +518,9 @@ final class SubtitleApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
     }
 }
 @main enum Main {
-    static func main() {if CommandLine.arguments.contains("--self-test") {do {try SubtitleSelfTest.run();print("Subtitle document tests: OK")}catch{fputs("Tests échoués : \(error.localizedDescription)\n",stderr);exit(1)};return};let app=NSApplication.shared;let delegate=SubtitleApp();app.delegate=delegate;withExtendedLifetime(delegate){app.run()} }
+    static func main() {
+        if CommandLine.arguments.contains("--inspect-timeline") {
+            do {let target=try FilmCraftBridge.shared.snapshot();print(target.canvas.label)}catch{fputs("\(error.localizedDescription)\n",stderr);exit(1)};return
+        }
+        if CommandLine.arguments.contains("--self-test") {do {try SubtitleSelfTest.run();print("Subtitle document tests: OK")}catch{fputs("Tests échoués : \(error.localizedDescription)\n",stderr);exit(1)};return};let app=NSApplication.shared;let delegate=SubtitleApp();app.delegate=delegate;withExtendedLifetime(delegate){app.run()} }
 }

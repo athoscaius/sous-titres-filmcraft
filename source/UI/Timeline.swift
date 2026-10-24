@@ -33,6 +33,9 @@ extension SubtitleApp {
                 switch result {
                 case .success(let target):
                     self.liveTimeline=target
+                    if self.timelineTarget == nil || self.timelineTarget?.sameTarget(as:target)==true {
+                        self.project.canvas=target.canvas;self.updateOverlay()
+                    }
                     let displayed=self.timelineTarget ?? target
                     self.titleLabel.stringValue="\(displayed.projectName) · \(displayed.sequenceName)"
                     if self.project.segments.isEmpty {self.status.stringValue="Timeline active : \(target.sequenceName) · prête à sous-titrer."}
@@ -71,7 +74,7 @@ extension SubtitleApp {
                 DispatchQueue.main.async {
                     self.timelineExportCancellation=nil;self.busy=false;self.progress.isHidden=true
                     self.timelinePreviousState=(self.project,self.timelineTarget,self.timelineAudioPath);self.record();self.project.videoPath=audio.path;self.project.segments=[];self.project.timelineOffset=0;self.projectURL=nil
-                    self.timelineAudioPath=audio.path;self.timelineTarget=checked;self.automaticTransfer=false;self.loadVideo(audio);self.updateUI();self.transcribeMedia()
+                    self.timelineAudioPath=audio.path;self.timelineTarget=checked;self.project.canvas=checked.canvas;self.automaticTransfer=false;self.loadVideo(audio);self.updateUI();self.transcribeMedia()
                 }
             } catch {
                 try? FileManager.default.removeItem(at:cache)
@@ -115,7 +118,7 @@ extension SubtitleApp {
             DispatchQueue.global(qos:.userInitiated).async {
                 defer {try? FileManager.default.removeItem(at:temp)}
                 do {
-                    let result=try FilmCraftBridge.shared.sendTitles(cues:cues,style:self.project.style,expected:target,binding:self.graphicBindings[target.trackKey])
+                    let result=try FilmCraftBridge.shared.sendTitles(cues:cues,style:self.project.style,lines:self.project.lines,expected:target,binding:self.graphicBindings[target.trackKey])
                     DispatchQueue.main.async {self.busy=false;self.timelineTarget=result.context;self.graphicBindings[target.trackKey]=result.binding;self.updateUI();self.status.stringValue=result.message;if CommandLine.arguments.contains("--qa-timeline") {
                         if CommandLine.arguments.contains("--qa-update-track"),self.timelineQAUpdates == 0 {
                             self.timelineQAUpdates=1

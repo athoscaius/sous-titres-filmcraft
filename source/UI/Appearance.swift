@@ -24,42 +24,49 @@ final class PanelButton: NSButton {
     }
 }
 final class TopAlignedClipView:NSClipView {override var isFlipped:Bool {true}}
+final class CanvasPreview:NSView {
+    let canvasView=NSView()
+    var canvas=SubtitleCanvas.fullHD {didSet{needsLayout=true}}
+    override init(frame:NSRect){super.init(frame:frame);wantsLayer=true;layer?.backgroundColor=Palette.field.cgColor;canvasView.wantsLayer=true;canvasView.layer?.backgroundColor=NSColor.black.cgColor;addSubview(canvasView)}
+    required init?(coder:NSCoder){fatalError("init(coder:)")}
+    override func layout(){super.layout();canvasView.frame=canvas.fitted(in:bounds)}
+}
 final class SubtitleOverlay: NSView {
-    var text = "" { didSet { needsDisplay = true } }
-    var style = SubtitleStyle() { didSet { needsDisplay = true } }
-    var videoSize = NSSize(width: 1920, height: 1080) { didSet { needsDisplay = true } }
+    var text = "" { didSet { if oldValue != text {needsDisplay = true} } }
+    var style = SubtitleStyle() { didSet { if oldValue != style {needsDisplay = true} } }
+    var canvas=SubtitleCanvas.fullHD {didSet{if oldValue != canvas{needsDisplay=true}}}
+    var lineLimit=1 {didSet{if oldValue != lineLimit{needsDisplay=true}}}
+    private var cache:(text:String,style:SubtitleStyle,canvas:SubtitleCanvas,lines:Int,result:SubtitleTextLayout)?
+    func textLayout()->SubtitleTextLayout {
+        if let cache,cache.text==text,cache.style==style,cache.canvas==canvas,cache.lines==lineLimit{return cache.result}
+        let result=SubtitleTextLayout.make(text:text,style:style,canvas:canvas,lines:lineLimit)
+        cache=(text,style,canvas,lineLimit,result);return result
+    }
+    var videoSize:NSSize {
+        get{NSSize(width:canvas.width,height:canvas.height)}
+        set{canvas=SubtitleCanvas(width:newValue.width,height:newValue.height)}
+    }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override func draw(_ dirtyRect: NSRect) {
-        guard !text.isEmpty, bounds.width > 0, videoSize.width > 0, videoSize.height > 0 else { return }
-        let videoRatio = videoSize.width/videoSize.height
-        var area = bounds
-        if bounds.width/bounds.height > videoRatio { area.size.width = bounds.height*videoRatio; area.origin.x = (bounds.width-area.width)/2 }
-        else { area.size.height = bounds.width/videoRatio; area.origin.y = (bounds.height-area.height)/2 }
-        let scale = area.height/1080
-        var font = NSFont(name: style.fontName, size: style.fontSize*scale) ?? .systemFont(ofSize: style.fontSize*scale)
-        if style.bold { font = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask) }
-        let p = NSMutableParagraphStyle(); p.alignment = .center; p.lineBreakMode = .byWordWrapping
-        let color = NSColor(hex: style.color)
-        let attributes: [NSAttributedString.Key:Any] = [.font:font, .foregroundColor:color, .paragraphStyle:p]
-        let attributed = NSAttributedString(string: text, attributes: attributes)
-        let maximum=max(1,area.width*0.9)
-        let measured=attributed.boundingRect(with:NSSize(width:maximum,height:10000),options:[.usesLineFragmentOrigin,.usesFontLeading])
-        let width=min(maximum,ceil(measured.width)+4),height=ceil(measured.height)+4
-        let x=area.minX+(area.width-width)*style.positionX
-        let y=area.minY+(area.height-height)*(1-style.positionY)
-        let rect=NSRect(x:x,y:y,width:width,height:height)
+        guard !text.isEmpty,bounds.width>0,bounds.height>0,canvas.isValid,let context=NSGraphicsContext.current?.cgContext else{return}
+        let area=canvas.fitted(in:bounds)
+        let layout=textLayout()
+        let paragraph=NSMutableParagraphStyle();paragraph.alignment = .center
+        let attributes:[NSAttributedString.Key:Any]=[.font:layout.font,.foregroundColor:NSColor(hex:style.color),.paragraphStyle:paragraph]
+        let rect=NSRect(x:layout.frame.minX,y:canvas.height-layout.frame.maxY,width:layout.frame.width,height:layout.frame.height)
         let options:NSString.DrawingOptions=[.usesLineFragmentOrigin,.usesFontLeading]
-        if style.outline > 0 {
-            // AppKit strokes straddle the glyph edge. Draw twice the requested
-            // width first, then restore the full glyph fill above the inner half.
+        context.saveGState();defer{context.restoreGState()}
+        context.translateBy(x:area.minX,y:area.minY);context.scaleBy(x:area.width/canvas.width,y:area.height/canvas.height)
+        if layout.outline>0 {
             var outlineAttributes=attributes
             outlineAttributes[.strokeColor]=NSColor(hex:style.outlineColor)
-            outlineAttributes[.strokeWidth]=2*style.outline/max(style.fontSize,1)*100
-            NSAttributedString(string:text,attributes:outlineAttributes).draw(with:rect,options:options)
+            outlineAttributes[.strokeWidth]=2*layout.outline/max(layout.fontSize,0.01)*100
+            NSAttributedString(string:layout.text,attributes:outlineAttributes).draw(with:rect,options:options)
         }
-        attributed.draw(with:rect,options:options)
+        NSAttributedString(string:layout.text,attributes:attributes).draw(with:rect,options:options)
     }
 }
+
 extension NSColor {
     convenience init(hex: String) {
         let n = UInt32(hex.dropFirst(), radix:16) ?? 0xFFFFFF

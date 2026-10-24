@@ -1,6 +1,6 @@
 # Sous-titres FilmCraft
 
-Compagnon indépendant pour **FilmCraft**, conçu pour ce Mac Apple Silicon, macOS 14 ou ultérieur. Transcription française locale avec Whisper large-v3, correction du texte et des temps, aperçu vidéo et personnalisation des sous-titres. Version 1.3.2.
+Compagnon indépendant pour **FilmCraft**, conçu pour ce Mac Apple Silicon, macOS 14 ou ultérieur. Transcription française locale avec Whisper large-v3, correction du texte et des temps, aperçu vidéo et personnalisation des sous-titres. Version 1.4.0.
 
 ## Démarrer
 
@@ -55,3 +55,5 @@ Références officielles : [Whisper](https://github.com/openai/whisper), [whispe
 Identité visuelle : nom « Sous-titres FilmCraft » et nouvelle icône fournie par l’utilisateur. Le dessin source est conservé dans `assets/provided-icon.png`, sans régénération. Les identifiants internes et dossiers de connexion restent inchangés pour conserver la configuration existante.
 
 Valeurs par défaut : Delight Semi Bold (police à installer séparément), taille 70 px, contour extérieur de 0 px, une ligne, 35 caractères et durée maximale de 3 secondes.
+
+Le compagnon lit automatiquement la résolution et le rapport de pixels de la séquence active. L’aperçu conserve son aspect ratio réel (horizontal, vertical, carré, panoramique). La taille 70 est une référence Full HD : elle est proportionnelle au côté court de la séquence, soit 140 pixels en UHD. Les titres trop longs sont ajustés à la largeur utile, avec les retours à la ligne choisis et des marges de sécurité. Le nombre de caractères transmis au moteur est plafonné par la largeur du cadre. Les curseurs X/Y restent réglables, sans être réinitialisés lors d’un changement de format. L’export ASS conserve également la résolution et la disposition.

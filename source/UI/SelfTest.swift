@@ -33,6 +33,33 @@ enum SubtitleSelfTest {
         try check(defaults.lines==1 && defaults.maxChars==35 && defaults.maxDuration==3,"Requested default segmentation")
         try check(defaults.style.fontFamily=="Delight" && defaults.style.fontFace=="Semi Bold" && defaults.style.fontSize==70 && defaults.style.outline==0,"Requested default typography")
         try check(tryOuterOutlineRendering(),"Outer outline preserves letter fill and adds exterior pixels")
+        let formats=[SubtitleCanvas.fullHD,SubtitleCanvas(width:1080,height:1920),SubtitleCanvas(width:1080,height:1080),SubtitleCanvas(width:3840,height:2160),SubtitleCanvas(width:2160,height:3840),SubtitleCanvas(width:2560,height:1080)]
+        let sample="Une transcription française assez longue pour tester l’adaptation automatique."
+        for canvas in formats {
+            let fitted=canvas.fitted(in:NSRect(x:0,y:0,width:700,height:320))
+            try check(abs(fitted.width/fitted.height-canvas.ratio)<0.0001,"Preview keeps sequence aspect ratio")
+            for lines in [1,2] {
+                let layout=SubtitleTextLayout.make(text:sample,style:defaults.style,canvas:canvas,lines:lines)
+                try check(layout.frame.minX>=0 && layout.frame.maxX<=canvas.width && layout.frame.minY>=0 && layout.frame.maxY<=canvas.height,"Adaptive captions remain inside sequence")
+                try check(layout.text.components(separatedBy:"\n").count<=lines,"Adaptive captions respect selected line count")
+                try check(layout.text.split(whereSeparator:{$0.isWhitespace})==sample.split(whereSeparator:{$0.isWhitespace}),"Adaptive layout preserves corrected words")
+                let ass=try SubtitleFormat.ass([SubtitleCue(start:0,end:1,text:sample)],style:defaults.style,canvas:canvas,lines:lines)
+                try check(ass.contains("PlayResX: \(Int(canvas.width))") && ass.contains("PlayResY: \(Int(canvas.height))"),"ASS uses actual sequence resolution")
+            }
+        }
+        let portrait=SubtitleCanvas(width:1080,height:1920)
+        let shortHD=SubtitleTextLayout.make(text:"Bonjour",style:defaults.style,canvas:.fullHD,lines:1)
+        let short4K=SubtitleTextLayout.make(text:"Bonjour",style:defaults.style,canvas:SubtitleCanvas(width:3840,height:2160),lines:1)
+        let shortVertical=SubtitleTextLayout.make(text:"Bonjour",style:defaults.style,canvas:portrait,lines:1)
+        try check(shortHD.fontSize==70 && shortVertical.fontSize==70 && short4K.fontSize==140,"Short-side font scaling avoids oversized vertical titles")
+        let vertical=SubtitleTextLayout.make(text:sample,style:defaults.style,canvas:portrait,lines:1)
+        try check(vertical.fontSize<shortVertical.fontSize,"Long vertical captions shrink to fit one line")
+        let par=try SubtitleCanvas.from(settings:["width":1440,"height":1080,"par":[4,3]])
+        try check(abs(par.ratio-16.0/9)<0.00001,"Non-square pixels affect displayed aspect ratio")
+        try rejects("Invalid sequence dimensions rejected"){_=try SubtitleCanvas.from(settings:["width":0,"height":1080])}
+        var legacy=try JSONSerialization.jsonObject(with:JSONEncoder().encode(defaults)) as! [String:Any];legacy.removeValue(forKey:"canvas")
+        let restoredLegacy=try JSONDecoder().decode(SubtitleProject.self,from:JSONSerialization.data(withJSONObject:legacy))
+        try check(restoredLegacy.outputCanvas == .fullHD,"Older documents keep a valid fallback canvas")
         let cues=[SubtitleCue(start:0.125,end:3.75,text:"Bonjour, François.\nBienvenue à Paris."),SubtitleCue(start:4,end:6.9,text:"Voici le contexte : l’intelligence artificielle.")]
         let srt=try SubtitleFormat.srt(cues)
         try check(srt.contains("00:00:00,125 --> 00:00:03,750"),"SRT millisecond precision")
@@ -103,10 +130,10 @@ enum SubtitleSelfTest {
         let adapter=SubtitleFilmCraftAdapter.style(SubtitleStyle())
         try check(abs(adapter.margin-70.0/1080)<0.000_001,"FilmCraft margin pixels normalized")
         try check(adapter.size==70,"FilmCraft font size remains in pixels")
-        let defaultProps=SubtitleFilmCraftAdapter.graphicProperties(defaults.style,height:1080)
+        let defaultProps=SubtitleFilmCraftAdapter.graphicProperties(defaults.style,canvas:.fullHD)
         try check(defaultProps["stroke_type"] as? String == "Outer" && defaultProps["stroke"] as? Bool == false,"FilmCraft default outline disabled and outside")
         var outlined=defaults.style;outlined.outline=4
-        let props=SubtitleFilmCraftAdapter.graphicProperties(outlined,height:2160)
+        let props=SubtitleFilmCraftAdapter.graphicProperties(outlined,canvas:SubtitleCanvas(width:3840,height:2160))
         try check(props["stroke_type"] as? String == "Outer" && props["stroke_width"] as? Double == 8 && props["stroke"] as? Bool == true,"FilmCraft outer outline scales with frame height")
         #endif
         print("Document checks passed: timing, overlaps, UTF-8, SRT/VTT/ASS, styles, projects, 12 mixed-word reflow regressions, FilmCraft style adapter and export offset.")
