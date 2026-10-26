@@ -4,13 +4,13 @@ Compagnon macOS indépendant pour transcrire en français une séquence FilmCraf
 
 ## Installer
 
-[Télécharger le DMG pour Mac Apple Silicon](https://github.com/athoscaius/sous-titres-filmcraft/releases/latest/download/Sous-titres-FilmCraft-1.4.0-arm64.dmg), l’ouvrir puis glisser **Sous-titres FilmCraft** dans Applications.
+[Télécharger le DMG pour Mac Apple Silicon](https://github.com/athoscaius/sous-titres-filmcraft/releases/latest/download/Sous-titres-FilmCraft-1.4.1-arm64.dmg), l’ouvrir puis glisser **Sous-titres FilmCraft** dans Applications.
 
 Mac Apple Silicon, **macOS 14+**. Environ 1,1 Go de modèles inclus, aucun compte ni clé API, aucun envoi du média sur Internet. Signature locale ad hoc, sans Developer ID ni notarisation Apple ; sur un autre Mac, Gatekeeper peut nécessiter une autorisation dans Confidentialité et sécurité.
 
 ## Utiliser
 
-1. Ouvrir le montage dans FilmCraft, puis le compagnon. Si FilmCraft était déjà ouvert sans connexion, enregistrer puis le relancer une fois depuis le bouton Timeline FilmCraft.
+1. Ouvrir le montage dans FilmCraft, puis le compagnon. La connexion sécurisée de FilmCraft 0.13 est préparée automatiquement. Si FilmCraft était déjà ouvert avant cette activation, enregistrer puis le relancer une fois depuis le bouton Timeline FilmCraft.
 2. Cliquer **Transcrire la séquence**. Rien n’est ajouté à la timeline à ce stade.
 3. Corriger les textes et durées directement dans la liste. Régler une/deux lignes, la taille, les polices du Mac et leurs variantes, les couleurs du texte et du contour, et les curseurs X/Y.
 4. Cliquer **Sous-titrer la TL** quand le résultat convient. Les renvois de la session remplacent le contenu de la même piste, sans doublon.

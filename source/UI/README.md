@@ -5,10 +5,11 @@ AppKit + AVKit, macOS 14+, Apple Silicon. Le document est indépendant de FilmCr
 Compilation (depuis la racine du livrable) :
 
 ```sh
+xcrun clang -Wno-deprecated-declarations -c source/Integration/FilmCraftEnvironment.c -o /private/tmp/FilmCraftEnvironment.o
 xcrun swiftc -module-cache-path /private/tmp/artcraft-subtitle-ui-cache \
   -parse-as-library -D FILMCRAFT_INTEGRATION -target arm64-apple-macos14.0 \
-  -framework AppKit -framework AVKit -framework AVFoundation \
-  source/UI/*.swift source/Integration/FilmCraftBridge.swift -o ArtCraftSousTitresIA
+  -framework AppKit -framework AVKit -framework AVFoundation -framework Security \
+  source/UI/*.swift source/Integration/FilmCraftBridge.swift /private/tmp/FilmCraftEnvironment.o -o ArtCraftSousTitresIA
 ```
 
 Ne pas inclure les tests autonomes du dossier Integration/Tests dans cette commande.
@@ -31,3 +32,5 @@ Le paramètre de test facultatif `--qa-context` utilise le vrai champ de context
 Le mode timeline importe une seule piste au premier envoi. Les renvois modifient son contenu et son style en conservant son identifiant numérique. La génération est immédiate au clic, sans confirmation. Le mode de test `--qa-update-track` exerce la génération, l’édition puis le renvoi sur la même piste, dans une instance FilmCraft isolée explicitement désignée.
 
 Version 1.3 : transcription séparée de l’envoi, édition directe des cellules de la liste, familles et variantes de polices macOS, curseurs taille/X/Y et couleur du contour. Les trois anciens encarts et le faux gras ont été retirés. Les envois de timeline utilisent désormais les titres texte natifs sur une piste vidéo ArtCraft unique afin de respecter la position libre et les faces de police. Le mode `--qa-two-step` vérifie la révision inchangée après la transcription avant d’invoquer le bouton d’envoi.
+
+Version 1.4.1 : authentification requise par FilmCraft 0.13. Compiler aussi `Integration/FilmCraftEnvironment.c`, ajouter son objet à swiftc ainsi que `-framework Security`. Le LaunchAgent prépare la connexion par session macOS ; un hôte déjà démarré sans clé doit être relancé une fois. `--connection-self-test` teste les identifiants dans un dossier temporaire, sans modifier la session réelle. `ARTCRAFT_BACKEND_RESOURCES` permet de réutiliser explicitement les ressources bin/models/licenses d’un paquet déjà construit lors d’une compilation d’interface.

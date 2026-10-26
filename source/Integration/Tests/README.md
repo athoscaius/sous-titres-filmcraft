@@ -29,11 +29,14 @@ Query `captions.list` afterward to assert one track, two cues and round-tripped 
 colors, background, outline, anchor, margin, line spacing and preserved newline. Sample observed
 result is ../../../../verification/filmcraft-style-roundtrip.json.
 Only close the session you own after checking its project path/name/sequence identity again.
-Never run against an existing user project, never terminate a user session, never set a global
-FILMCRAFT_CONTROL_PORT environment variable (the host protocol is unauthenticated).
+Never run against an existing user project, never terminate a user session, never configure the user’s login environment during fixture tests. FilmCraft 0.13 requires a private random FILMCRAFT_CONTROL_TOKEN passed only in the fixture process environment.
 
 ## Formats de séquence (1.4)
 
 `FormatFixture.swift` se compile séparément avec `UI/SubtitleCanvas.swift`, `UI/SubtitleDocument.swift` et `Integration/FilmCraftBridge.swift` (définir `FILMCRAFT_INTEGRATION`). Il exige le PID et un port distinct de 47873 d’une instance vide lancée avec son propre `--data-dir` temporaire. Il refuse un projet enregistré et exige une séquence dont le nom commence par `Format fixture `. Il crée deux titres de test et renvoie leur taille, position et les identifiants des clips, à vérifier avec `graphics.list`. Ne jamais le lancer dans un projet utilisateur.
 
 Les autotests `--self-test` du compagnon couvrent aussi les formats 16:9, 9:16, 1:1, UHD, vertical UHD et panoramique, les pixels non carrés, la conservation des mots et des limites de lignes, ainsi que la résolution ASS. `--preview-ui --preview-format 1080x1920 --preview-output /private/tmp/vertical.png` produit un aperçu fictif sans connexion FilmCraft.
+
+## Authentification 0.13 (1.4.1)
+
+Compiler `FilmCraftEnvironment.c` avec clang, puis ajouter l’objet, `UI/FilmCraftSession.swift` et `-framework Security` aux compilations autonomes. `AuthenticationFixture.swift` exige PID et port d’une instance vide isolée, une séquence `Format fixture authentication…`, un répertoire temporaire et la clé éphémère dans son environnement. Il teste les requêtes authentifiées, le refus sans clé, la détection, le mixage audio et les mises à jour sur la même piste. `--connection-self-test` utilise un dossier temporaire sans changer les variables de la session réelle.

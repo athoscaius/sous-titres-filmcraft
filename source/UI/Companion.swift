@@ -519,6 +519,8 @@ final class SubtitleApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
 }
 @main enum Main {
     static func main() {
+        if CommandLine.arguments.contains("--configure-filmcraft-connection") {do{try FilmCraftSession.configure(registerAgent:false)}catch{fputs("La connexion FilmCraft n’a pas pu être préparée.\n",stderr);exit(1)};return}
+        if CommandLine.arguments.contains("--connection-self-test") {do{try FilmCraftSession.selfTest()}catch{fputs("Test de connexion échoué.\n",stderr);exit(1)};return}
         if CommandLine.arguments.contains("--inspect-timeline") {
             do {let target=try FilmCraftBridge.shared.snapshot();print(target.canvas.label)}catch{fputs("\(error.localizedDescription)\n",stderr);exit(1)};return
         }

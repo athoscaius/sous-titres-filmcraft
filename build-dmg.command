@@ -24,5 +24,5 @@ Signature locale ad hoc, sans notarisation Apple ni certificat Developer ID : su
 Projet indépendant de FilmCraft / ArtCraft. Voir LISEZ-MOI.md avec les sources pour les détails.
 TXT
 codesign --verify --deep --strict "$DMG_WORK/Sous-titres FilmCraft.app"
-hdiutil create -volname 'Sous-titres FilmCraft' -srcfolder "$DMG_WORK" -format UDZO -ov "$PACKAGE_DIR/Sous-titres-FilmCraft-1.4.0-arm64.dmg"
-hdiutil verify "$PACKAGE_DIR/Sous-titres-FilmCraft-1.4.0-arm64.dmg"
+hdiutil create -volname 'Sous-titres FilmCraft' -srcfolder "$DMG_WORK" -format UDZO -ov "$PACKAGE_DIR/Sous-titres-FilmCraft-1.4.1-arm64.dmg"
+hdiutil verify "$PACKAGE_DIR/Sous-titres-FilmCraft-1.4.1-arm64.dmg"

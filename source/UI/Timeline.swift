@@ -9,18 +9,7 @@ final class TimelineCancellation {
 
 extension SubtitleApp {
     func configureTimelineConnection() {
-        // FilmCraft reads this supported variable only at startup. Persist across login
-        // without patching the host bundle or replacing its executable.
-        do {
-            let dir=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/LaunchAgents",isDirectory:true)
-            try FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true)
-            let agent:[String:Any] = ["Label":"local.artcraft.filmcraft-connection", "ProgramArguments":["/bin/launchctl","setenv","FILMCRAFT_CONTROL_PORT",String(FilmCraftBridge.port)],"RunAtLoad":true]
-            let data=try PropertyListSerialization.data(fromPropertyList:agent,format:.xml,options:0)
-            try data.write(to:dir.appendingPathComponent("local.artcraft.filmcraft-connection.plist"),options:.atomic)
-            let process=Process();process.executableURL=URL(fileURLWithPath:"/bin/launchctl");process.arguments=["setenv","FILMCRAFT_CONTROL_PORT",String(FilmCraftBridge.port)]
-            try process.run();process.waitUntilExit()
-            if process.terminationStatus != 0 {throw SubtitleError.invalid("Activation de la connexion impossible. Ouvrez FilmCraft depuis le compagnon.")}
-        } catch {status.stringValue=error.localizedDescription}
+        do{try FilmCraftSession.configure()}catch{status.stringValue=error.localizedDescription}
     }
     func refreshTimeline() {
         guard timelineMode,!busy,!connectionPollPending else{return}
@@ -39,11 +28,11 @@ extension SubtitleApp {
                     let displayed=self.timelineTarget ?? target
                     self.titleLabel.stringValue="\(displayed.projectName) · \(displayed.sequenceName)"
                     if self.project.segments.isEmpty {self.status.stringValue="Timeline active : \(target.sequenceName) · prête à sous-titrer."}
-                case .failure:
+                case .failure(let error):
                     self.liveTimeline=nil
                     if self.timelineTarget == nil {
                         self.titleLabel.stringValue="FilmCraft · connexion en attente"
-                        self.status.stringValue="Enregistrez puis quittez FilmCraft une première fois, et cliquez Timeline FilmCraft pour le rouvrir connecté."
+                        self.status.stringValue=error.localizedDescription
                     }
                 }
             }

@@ -55,7 +55,9 @@ struct FilmCraftImportResult {
 }
 enum FilmCraftBridgeError: LocalizedError {
     case message(String)
-    var errorDescription: String? { if case .message(let text) = self { return text }; return nil }
+    case unavailable
+    case authentication
+    var errorDescription:String? {switch self {case .message(let text):return text;case .unavailable:return FilmCraftBridge.manualImportMessage;case .authentication:return "La connexion sécurisée de FilmCraft doit être renouvelée. Enregistrez et quittez FilmCraft une fois, puis rouvrez-le avec Timeline FilmCraft. Votre transcription est conservée."}}
 }
 
 final class FilmCraftBridge {
@@ -67,34 +69,41 @@ final class FilmCraftBridge {
     private var titleBindings:[String:FilmCraftTitleBinding]=[:]
     private let connectionPort: UInt16
     private let hostPID: Int32?
+    private var token:String? {hostPID == nil ? FilmCraftSession.currentToken():ProcessInfo.processInfo.environment["FILMCRAFT_CONTROL_TOKEN"]}
     init(connectionPort:UInt16 = FilmCraftBridge.port,hostPID:Int32?=nil){self.connectionPort=connectionPort;self.hostPID=hostPID}
     static let bundleID = "ai.storyteller.filmcraft"
     static let port: UInt16 = 47873
-    static let manualImportMessage = "La session FilmCraft actuelle n’a pas de connexion compagnon. Exportez le fichier SRT, puis importez-le dans FilmCraft avec Fichier > Importer. Pour activer l’envoi direct, enregistrez votre projet, quittez FilmCraft vous-même, puis ouvrez-le depuis ce compagnon."
+    static let manualImportMessage = "FilmCraft n’a pas encore activé sa connexion locale sécurisée. Enregistrez et quittez FilmCraft une fois, puis cliquez Timeline FilmCraft pour le rouvrir. La connexion sera préparée automatiquement lors des prochains lancements."
 
-    func openFilmCraft(completion: @escaping (Result<Void, Error>) -> Void) {
+    func openFilmCraft(completion:@escaping(Result<Void,Error>)->Void) {
         DispatchQueue.main.async {
-            if let running = NSRunningApplication.runningApplications(withBundleIdentifier: Self.bundleID).first {
-                running.activate(options: [])
-                completion(.success(()))
-                return
-            }
-            guard let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: Self.bundleID) else {
-                completion(.failure(FilmCraftBridgeError.message("FilmCraft n’est pas installé dans Applications.")))
-                return
-            }
-            let config = NSWorkspace.OpenConfiguration()
-            config.arguments = ["--control", String(Self.port)]
-            config.activates = true
-            NSWorkspace.shared.openApplication(at: app, configuration: config) { _, error in
-                if let error { completion(.failure(error)) } else { completion(.success(())) }
-            }
+            do {
+                let token=try FilmCraftSession.configure()
+                if let running=NSRunningApplication.runningApplications(withBundleIdentifier:Self.bundleID).first {running.activate(options:[]);self.waitForHost(seconds:2,completion:completion);return}
+                guard let app=NSWorkspace.shared.urlForApplication(withBundleIdentifier:Self.bundleID) else{throw FilmCraftBridgeError.message("FilmCraft n’est pas installé dans Applications.")}
+                let config=NSWorkspace.OpenConfiguration();config.arguments=["--control",String(Self.port)];config.environment=["FILMCRAFT_CONTROL_PORT":String(Self.port),"FILMCRAFT_CONTROL_TOKEN":token];config.activates=true
+                NSWorkspace.shared.openApplication(at:app,configuration:config){_,error in if let error{DispatchQueue.main.async{completion(.failure(error))}}else{self.waitForHost(seconds:20,completion:completion)}}
+            }catch{completion(.failure(error))}
+        }
+    }
+    private func waitForHost(seconds:Double,completion:@escaping(Result<Void,Error>)->Void) {
+        DispatchQueue.global(qos:.userInitiated).async {
+            let deadline=Date().addingTimeInterval(seconds);var result:Result<Void,Error> = .failure(FilmCraftBridgeError.unavailable)
+            repeat {
+                do{let connection=try FilmCraftConnection(port:self.connectionPort,token:self.token);_=try connection.call("engine.commands");result = .success(());break}
+                catch{result = .failure(error);if case FilmCraftBridgeError.unavailable=error{Thread.sleep(forTimeInterval:0.25)}else{break}}
+            }while Date()<deadline
+            DispatchQueue.main.async{completion(result)}
         }
     }
 
     func snapshot() throws -> FilmCraftContext {
-        let connection = try FilmCraftConnection(port: connectionPort)
-        return try context(connection)
+        guard !NSRunningApplication.runningApplications(withBundleIdentifier:Self.bundleID).filter({hostPID==nil || $0.processIdentifier==hostPID}).isEmpty else{throw FilmCraftBridgeError.message("Ouvrez FilmCraft et la séquence à sous-titrer.")}
+        let deadline=Date().addingTimeInterval(3)
+        while true {
+            do{let connection=try FilmCraftConnection(port:connectionPort,token:token);return try context(connection)}
+            catch FilmCraftBridgeError.unavailable{if Date()>=deadline{throw FilmCraftBridgeError.unavailable};Thread.sleep(forTimeInterval:0.2)}
+        }
     }
 
     func importCaptions(srtURL: URL, style: FilmCraftCaptionStyle, expected: FilmCraftContext? = nil) throws -> FilmCraftImportResult {
@@ -103,7 +112,7 @@ final class FilmCraftBridge {
               FileManager.default.isReadableFile(atPath: srtURL.path) else {
             throw FilmCraftBridgeError.message("Exportez d’abord un fichier SRT lisible pour l’envoyer à FilmCraft.")
         }
-        let connection = try FilmCraftConnection(port: connectionPort)
+        let connection = try FilmCraftConnection(port: connectionPort,token:token)
         guard let commands = try connection.call("engine.commands") as? [[String: Any]] else {
             throw FilmCraftBridgeError.message("FilmCraft renvoie un protocole incompatible. Utilisez l’import SRT.")
         }
@@ -165,7 +174,7 @@ final class FilmCraftBridge {
             }
             end=cue.end
         }
-        let c=try FilmCraftConnection(port:connectionPort)
+        let c=try FilmCraftConnection(port:connectionPort,token:token)
         guard try context(c) == expected else {throw FilmCraftBridgeError.message("Le montage a changé. Aucun sous-titre n’a été modifié. Relancez la transcription de la timeline.")}
         guard let listing=try c.execute("captions.list",["track":track]) as? [String:Any],
               let tracks=listing["tracks"] as? [[String:Any]],
@@ -217,7 +226,7 @@ final class FilmCraftBridge {
     func sendTitles(cues:[FilmCraftCue],style:SubtitleStyle,lines:Int=1,expected:FilmCraftContext,binding:FilmCraftTitleBinding?) throws -> FilmCraftTitleResult {
         guard !cues.isEmpty,style.fontSize.isFinite,(12...160).contains(style.fontSize),
               (0...1).contains(style.positionX),(0...1).contains(style.positionY) else {throw FilmCraftBridgeError.message("Paramètres des titres invalides.")}
-        let c=try FilmCraftConnection(port:connectionPort)
+        let c=try FilmCraftConnection(port:connectionPort,token:token)
         guard try context(c) == expected else {throw FilmCraftBridgeError.message("Le montage a changé depuis la transcription. Transcrivez à nouveau la séquence avant l’envoi.")}
         guard let sequence=try c.execute("sequence.inspect",["item":expected.sequenceID]) as? [String:Any],
               let settings=sequence["settings"] as? [String:Any],let w=(settings["width"] as? NSNumber)?.doubleValue,
@@ -278,7 +287,7 @@ final class FilmCraftBridge {
     // Render the active sequence mix, including cuts, gaps, muted tracks and effects.
     func exportTimeline(to url: URL, expected: FilmCraftContext, cancelled: () -> Bool,
                         progress: (Double) -> Void) throws -> FilmCraftContext {
-        let c = try FilmCraftConnection(port: connectionPort)
+        let c = try FilmCraftConnection(port: connectionPort,token:token)
         guard try context(c) == expected else { throw FilmCraftBridgeError.message("La timeline a changé. Relancez la transcription.") }
         guard let reply = try c.execute("file.exportMedia", ["path":url.path, "sequence":expected.sequenceID,
             "format":"wav", "range":"entire", "wait":false]) as? [String:Any],
@@ -336,14 +345,16 @@ final class FilmCraftBridge {
 }
 
 // Blocking loopback transport with bounded replies/timeouts and SIGPIPE suppressed.
-// Protocol is unauthenticated in FilmCraft 0.12.0; do not expose a remote endpoint.
-private final class FilmCraftConnection {
+// FilmCraft 0.13+ requires the per-login credential on every request. Loopback only.
+final class FilmCraftConnection {
     private let fd: Int32
     private var buffer = Data()
     private var nextID = 0
-    init(port: UInt16) throws {
+    private let token:String?
+    init(port: UInt16,token:String?=nil) throws {
+        self.token=token
         fd = socket(AF_INET, SOCK_STREAM, 0)
-        guard fd >= 0 else { throw FilmCraftBridgeError.message(FilmCraftBridge.manualImportMessage) }
+        guard fd >= 0 else { throw FilmCraftBridgeError.unavailable }
         var timeout = timeval(tv_sec: 8, tv_usec: 0)
         var one: Int32 = 1
         setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout.size(ofValue: one)))
@@ -357,7 +368,7 @@ private final class FilmCraftConnection {
         let result = withUnsafePointer(to: &address) { ptr in
             ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
         }
-        if result != 0 { close(fd); throw FilmCraftBridgeError.message(FilmCraftBridge.manualImportMessage) }
+        if result != 0 { close(fd); throw FilmCraftBridgeError.unavailable }
     }
     deinit { close(fd) }
     func execute(_ command: String, _ params: [String: Any]) throws -> Any {
@@ -365,7 +376,9 @@ private final class FilmCraftConnection {
     }
     func call(_ method: String, _ params: [String: Any] = [:]) throws -> Any {
         nextID += 1
-        var data = try JSONSerialization.data(withJSONObject: ["id": nextID, "method": method, "params": params])
+        var request:[String:Any] = ["id": nextID, "method": method, "params": params]
+        if let token,FilmCraftSession.valid(token){request["token"]=token}
+        var data = try JSONSerialization.data(withJSONObject:request)
         data.append(10)
         try data.withUnsafeBytes { raw in
             var sent = 0
@@ -385,6 +398,7 @@ private final class FilmCraftConnection {
         let end = buffer.firstIndex(of: 10)!
         let line = buffer.prefix(upTo: end)
         buffer.removeSubrange(...end)
+        if let value=try JSONSerialization.jsonObject(with:line) as? [String:Any],let error=value["error"] as? String,error.localizedCaseInsensitiveContains("authentication") {throw FilmCraftBridgeError.authentication}
         guard let reply = try JSONSerialization.jsonObject(with: line) as? [String: Any],
               (reply["id"] as? NSNumber)?.intValue == nextID, let success = reply["ok"] as? Bool else {
             throw FilmCraftBridgeError.message("Réponse FilmCraft incompatible. Utilisez l’import SRT.")
